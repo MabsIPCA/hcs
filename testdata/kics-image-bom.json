@@ -12,6 +12,12 @@
       ] },
     { "type": "container", "bom-ref": "gcr.io/distroless/base@latest", "name": "distroless/base", "version": "latest",
       "purl": "pkg:docker/distroless/base@latest?repository_url=gcr.io",
-      "properties": [ { "name": "kics:source:file", "value": "templates/base.yaml" }, { "name": "kics:source:line", "value": "3" } ] }
+      "properties": [ { "name": "kics:source:file", "value": "templates/base.yaml" }, { "name": "kics:source:line", "value": "3" } ] },
+    { "type": "container", "bom-ref": "docker.io/library/redis@7", "name": "library/redis", "version": "7",
+      "purl": "pkg:docker/library/redis@7",
+      "properties": [
+        { "name": "kics:source:file", "value": "templates/redis.yaml" }, { "name": "kics:source:line", "value": "9" },
+        { "name": "kics:source:file", "value": "docker-compose.yml" }, { "name": "kics:source:line", "value": "5" }
+      ] }
   ]
 }

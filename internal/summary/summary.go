@@ -50,7 +50,7 @@ func Render(bom *cdx.BOM) string {
 					}
 				}
 			}
-			if imgRef == "" {
+			if imgRef == "" || sev == "" {
 				continue
 			}
 			if perImage[imgRef] == nil {
@@ -114,7 +114,7 @@ func firstSource(props *[]cdx.Property) string {
 }
 
 func highestSeverity(ratings *[]cdx.VulnerabilityRating) string {
-	best := "low"
+	best := ""
 	if ratings == nil {
 		return best
 	}
@@ -149,7 +149,7 @@ func bump(c *counts, sev string) {
 		c.high++
 	case "medium":
 		c.medium++
-	default:
+	case "low":
 		c.low++
 	}
 }

@@ -15,10 +15,11 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 2 || os.Args[1] != "scan" {
+	if len(os.Args) < 3 || os.Args[1] != "scan" {
 		fmt.Fprintln(os.Stderr, "usage: hcs scan <path> [flags]")
 		os.Exit(2)
 	}
+	// Contract: hcs scan <path> [flags]  — path is os.Args[2]; flags follow it.
 	fs := flag.NewFlagSet("scan", flag.ExitOnError)
 	kicsConfig := fs.String("kics-config", "", "path to KICS config file")
 	trivyConfig := fs.String("trivy-config", "", "path to Trivy config file")
@@ -75,12 +76,16 @@ func run(scanPath, kicsConfig, trivyConfig, output, summaryOut string, r runner.
 	return nil
 }
 
-func writeBOM(path string, bom *cdx.BOM) error {
+func writeBOM(path string, bom *cdx.BOM) (retErr error) {
 	f, err := os.Create(path)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); retErr == nil {
+			retErr = cerr
+		}
+	}()
 	enc := cdx.NewBOMEncoder(f, cdx.BOMFileFormatJSON)
 	enc.SetPretty(true)
 	return enc.Encode(bom)

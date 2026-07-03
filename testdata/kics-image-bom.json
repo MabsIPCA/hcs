@@ -1,0 +1,17 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:00000000-0000-4000-8000-000000000001",
+  "version": 1,
+  "metadata": { "timestamp": "2026-07-03T00:00:00Z", "tools": [{ "vendor": "Checkmarx", "name": "KICS", "version": "test" }] },
+  "components": [
+    { "type": "container", "bom-ref": "docker.io/library/nginx@1.21", "name": "library/nginx", "version": "1.21",
+      "purl": "pkg:docker/library/nginx@1.21",
+      "properties": [
+        { "name": "kics:source:file", "value": "templates/deploy.yaml" }, { "name": "kics:source:line", "value": "14" }
+      ] },
+    { "type": "container", "bom-ref": "gcr.io/distroless/base@latest", "name": "distroless/base", "version": "latest",
+      "purl": "pkg:docker/distroless/base@latest?repository_url=gcr.io",
+      "properties": [ { "name": "kics:source:file", "value": "templates/base.yaml" }, { "name": "kics:source:line", "value": "3" } ] }
+  ]
+}

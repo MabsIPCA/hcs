@@ -16,6 +16,9 @@ import (
 // vulnerabilities, and recording a dependency graph.
 func Merge(target string, images []sbomio.Image, trivyBOMs map[string]*cdx.BOM) *cdx.BOM {
 	root := cdx.NewBOM()
+	root.SpecVersion = cdx.SpecVersion1_5
+	root.JSONSchema = "http://cyclonedx.org/schema/bom-1.5.schema.json"
+	root.XMLNS = "http://cyclonedx.org/schema/bom/1.5"
 	root.SerialNumber = "urn:uuid:" + uuid.NewString()
 	root.Version = 1
 	targetRef := "target:" + target

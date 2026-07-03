@@ -2,6 +2,7 @@
 package runner
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -31,7 +32,7 @@ func (r Runner) KICSImageBOM(scanPath, kicsConfig, outDir string) (string, error
 	// KICS exits non-zero when it finds results; that is not a runner failure.
 	if err := cmd.Run(); err != nil {
 		if _, ok := err.(*exec.ExitError); !ok {
-			return "", err
+			return "", fmt.Errorf("kics scan: %w", err)
 		}
 	}
 	return filepath.Join(outDir, "kics-image-bom.json"), nil
@@ -53,7 +54,7 @@ func (r Runner) TrivyImageBOM(ref, trivyConfig string) (*cdx.BOM, error) {
 	cmd := exec.Command(r.TrivyBin, args...)
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("trivy image: %w", err)
 	}
 	return sbomio.ReadTrivyBOM(tmp.Name())
 }

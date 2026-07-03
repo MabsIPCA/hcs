@@ -59,6 +59,9 @@ func TestMerge_NestsPackagesUnderImages(t *testing.T) {
 	if !hasProp(nginx.Properties, "kics:source:file", "templates/deploy.yaml") {
 		t.Errorf("missing provenance on nginx: %+v", nginx.Properties)
 	}
+	if !hasProp(nginx.Properties, "kics:source:line", "14") {
+		t.Errorf("missing line provenance on nginx: %+v", nginx.Properties)
+	}
 	// vulnerability aggregated and its affects ref rewritten to the namespaced ref
 	if bom.Vulnerabilities == nil || len(*bom.Vulnerabilities) != 1 {
 		t.Fatalf("want 1 vulnerability, got %v", bom.Vulnerabilities)
@@ -66,6 +69,11 @@ func TestMerge_NestsPackagesUnderImages(t *testing.T) {
 	v := (*bom.Vulnerabilities)[0]
 	if (*v.Affects)[0].Ref != want {
 		t.Errorf("vuln affects ref = %q, want %q", (*v.Affects)[0].Ref, want)
+	}
+	// vuln BOMRef namespaced under the image ref
+	wantVulnRef := "docker.io/library/nginx@1.21/CVE-1"
+	if v.BOMRef != wantVulnRef {
+		t.Errorf("vuln BOMRef = %q, want %q", v.BOMRef, wantVulnRef)
 	}
 	// redis has no packages but still appears
 	redis := (*bom.Components)[1]
@@ -75,6 +83,50 @@ func TestMerge_NestsPackagesUnderImages(t *testing.T) {
 	// metadata target component
 	if bom.Metadata == nil || bom.Metadata.Component == nil || bom.Metadata.Component.Name != "mychart" {
 		t.Errorf("metadata component = %+v", bom.Metadata)
+	}
+	// spec version must be CycloneDX 1.5
+	if bom.SpecVersion != cdx.SpecVersion1_5 {
+		t.Errorf("specVersion = %v, want %v", bom.SpecVersion, cdx.SpecVersion1_5)
+	}
+}
+
+func TestMerge_RewritesImageLevelVuln(t *testing.T) {
+	tb := cdx.NewBOM()
+	tb.Metadata = &cdx.Metadata{
+		Component: &cdx.Component{
+			Type:    cdx.ComponentTypeContainer,
+			BOMRef:  "img-self",
+			Name:    "library/nginx",
+			Version: "1.21",
+		},
+	}
+	tb.Components = &[]cdx.Component{
+		{Type: cdx.ComponentTypeLibrary, BOMRef: "pkg-ref", Name: "somepkg", Version: "1.0"},
+	}
+	tb.Vulnerabilities = &[]cdx.Vulnerability{{
+		BOMRef:  "CVE-IMG-1",
+		ID:      "CVE-IMG-1",
+		Ratings: &[]cdx.VulnerabilityRating{{Severity: cdx.SeverityHigh}},
+		Affects: &[]cdx.Affects{{Ref: "img-self"}},
+	}}
+
+	images := []sbomio.Image{
+		{BOMRef: "docker.io/library/nginx@1.21", Name: "library/nginx", Version: "1.21"},
+	}
+	bom := Merge("mychart", images, map[string]*cdx.BOM{
+		"docker.io/library/nginx@1.21": tb,
+	})
+
+	if bom.Vulnerabilities == nil || len(*bom.Vulnerabilities) != 1 {
+		t.Fatalf("want 1 vulnerability, got %v", bom.Vulnerabilities)
+	}
+	v := (*bom.Vulnerabilities)[0]
+	if v.Affects == nil || len(*v.Affects) == 0 {
+		t.Fatalf("vuln has no affects")
+	}
+	wantRef := "docker.io/library/nginx@1.21"
+	if (*v.Affects)[0].Ref != wantRef {
+		t.Errorf("image-level vuln affects ref = %q, want %q", (*v.Affects)[0].Ref, wantRef)
 	}
 }
 

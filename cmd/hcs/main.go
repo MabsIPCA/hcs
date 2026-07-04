@@ -64,7 +64,14 @@ func run(scanPath, kicsConfig, trivyConfig, output, summaryOut string, r runner.
 		trivyBOMs[img.BOMRef] = tb
 	}
 
-	merged := merge.Merge(filepath.Base(scanPath), images, trivyBOMs)
+	target := filepath.Base(scanPath)
+	if abs, err := filepath.Abs(scanPath); err == nil {
+		target = filepath.Base(abs)
+	}
+	if target == "." || target == "/" || target == "" {
+		target = "chart"
+	}
+	merged := merge.Merge(target, images, trivyBOMs)
 
 	if err := writeBOM(output, merged); err != nil {
 		return err

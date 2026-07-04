@@ -26,8 +26,8 @@ runs:
           -v "${{ github.workspace }}:/workspace" -w /workspace \
           ghcr.io/mabsipca/hcs:latest scan "${{ inputs.path }}" \
           --output "${{ inputs.output }}" --summary "hcs-summary.md" \
-          ${{ inputs.kics-config && format('--kics-config {0}', inputs.kics-config) || '' }} \
-          ${{ inputs.trivy-config && format('--trivy-config {0}', inputs.trivy-config) || '' }}
+          ${{ inputs.kics-config && format('--kics-config "{0}"', inputs.kics-config) || '' }} \
+          ${{ inputs.trivy-config && format('--trivy-config "{0}"', inputs.trivy-config) || '' }}
     - name: Upsert PR comment
       if: ${{ inputs.comment == 'true' && github.event_name == 'pull_request' }}
       uses: actions/github-script@v7

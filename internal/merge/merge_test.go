@@ -3,8 +3,8 @@ package merge
 import (
 	"testing"
 
-	"github.com/MabsIPCA/hcs/internal/sbomio"
 	cdx "github.com/CycloneDX/cyclonedx-go"
+	"github.com/MabsIPCA/hcs/internal/sbomio"
 )
 
 func fixtureImages() []sbomio.Image {

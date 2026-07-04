@@ -17,8 +17,8 @@ type counts struct{ critical, high, medium, low int }
 func Render(bom *cdx.BOM) string {
 	// Map every component bom-ref to its owning image bom-ref.
 	owner := map[string]string{}
-	displayRef := map[string]string{}   // image bom-ref -> "name:version"
-	source := map[string]string{}       // image bom-ref -> "file:line"
+	displayRef := map[string]string{} // image bom-ref -> "name:version"
+	source := map[string]string{}     // image bom-ref -> "file:line"
 	order := []string{}
 
 	if bom.Components != nil {

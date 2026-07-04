@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	cdx "github.com/CycloneDX/cyclonedx-go"
 	"github.com/MabsIPCA/hcs/internal/merge"
 	"github.com/MabsIPCA/hcs/internal/sbomio"
-	cdx "github.com/CycloneDX/cyclonedx-go"
 )
 
 func TestRender(t *testing.T) {

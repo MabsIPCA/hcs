@@ -70,8 +70,12 @@ hcs scan <repo-or-chart-path>
   --summary <path>           # Markdown summary (default: hcs-summary.md)
   --kics-bin <path>          # override bundled kics (default: kics on PATH)
   --trivy-bin <path>         # override bundled trivy (default: trivy on PATH)
-  --fail-on <severity>       # optional non-zero exit if >= severity found (default: none)
+  --fail-on <severity>       # DEFERRED (not in v1): optional non-zero exit if >= severity found
 ```
+
+> **Note (v1 descope):** `--fail-on` is deferred. v1 is comment/report-only; the
+> merged SBOM carries all vulnerabilities and the PR comment surfaces the severity
+> counts, so a CI gate can be added later without changing the output format.
 
 ## Merged SBOM format
 
@@ -147,7 +151,7 @@ against this repo.
 - KICS or Trivy binary missing / non-executable → fail fast with a clear message.
 - KICS scan failure → fatal (no images to work with).
 - Per-image Trivy failure → warn and continue (partial SBOM), overall success
-  unless `--fail-on` threshold met.
+  (the `--fail-on` gate is deferred; see the CLI-surface note above).
 - Malformed Trivy/KICS output → surfaced as an error naming the offending file.
 
 ## Testing (TDD)

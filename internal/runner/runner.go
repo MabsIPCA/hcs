@@ -6,9 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-
-	cdx "github.com/CycloneDX/cyclonedx-go"
-	"github.com/MabsIPCA/hcs/internal/sbomio"
 )
 
 // Runner holds binary locations and KICS query assets path.
@@ -18,9 +15,17 @@ type Runner struct {
 	KICSQueryPath string
 }
 
-// KICSImageBOM runs KICS (Helm render + image BoM) and returns the output path.
-func (r Runner) KICSImageBOM(scanPath, kicsConfig, outDir string) (string, error) {
-	args := []string{"scan", "-p", scanPath, "--experimental-helm-scan", "--image-bom", "-o", outDir, "--no-progress"}
+// KICSOutputs are the files a single KICS scan writes into the output dir.
+type KICSOutputs struct {
+	JSON     string // results.json  (native severities)
+	SARIF    string // results.sarif (for the merged report)
+	ImageBOM string // kics-image-bom.json (image discovery)
+}
+
+// KICSScan runs KICS once producing JSON + SARIF findings and an image BoM.
+func (r Runner) KICSScan(scanPath, kicsConfig, outDir string) (KICSOutputs, error) {
+	args := []string{"scan", "-p", scanPath, "--experimental-helm-scan", "--image-bom",
+		"--report-formats", "json,sarif", "-o", outDir, "--no-progress"}
 	if r.KICSQueryPath != "" {
 		args = append(args, "-q", r.KICSQueryPath)
 	}
@@ -32,32 +37,26 @@ func (r Runner) KICSImageBOM(scanPath, kicsConfig, outDir string) (string, error
 	// KICS exits non-zero when it finds results; that is not a runner failure.
 	if err := cmd.Run(); err != nil {
 		if _, ok := err.(*exec.ExitError); !ok {
-			return "", fmt.Errorf("kics scan: %w", err)
+			return KICSOutputs{}, fmt.Errorf("kics scan: %w", err)
 		}
 	}
-	return filepath.Join(outDir, "kics-image-bom.json"), nil
+	return KICSOutputs{
+		JSON:     filepath.Join(outDir, "results.json"),
+		SARIF:    filepath.Join(outDir, "results.sarif"),
+		ImageBOM: filepath.Join(outDir, "kics-image-bom.json"),
+	}, nil
 }
 
-// TrivyImageBOM runs `trivy image <ref> --format cyclonedx --scanners vuln`
-// and parses the BOM. The explicit --scanners vuln is required because
-// `--format cyclonedx` otherwise disables the vulnerability scanner, which
-// would leave the merged SBOM without any CVEs.
-func (r Runner) TrivyImageBOM(ref, trivyConfig string) (*cdx.BOM, error) {
-	tmp, err := os.CreateTemp("", "trivy-*.cdx.json")
-	if err != nil {
-		return nil, err
-	}
-	tmp.Close()
-	defer os.Remove(tmp.Name())
-
-	args := []string{"image", ref, "--format", "cyclonedx", "--scanners", "vuln", "--output", tmp.Name()}
+// TrivyImageSARIF runs `trivy image <ref> --format sarif --scanners vuln` to outPath.
+func (r Runner) TrivyImageSARIF(ref, trivyConfig, outPath string) error {
+	args := []string{"image", ref, "--format", "sarif", "--scanners", "vuln", "--output", outPath}
 	if trivyConfig != "" {
 		args = append(args, "--config", trivyConfig)
 	}
 	cmd := exec.Command(r.TrivyBin, args...)
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("trivy image: %w", err)
+		return fmt.Errorf("trivy image: %w", err)
 	}
-	return sbomio.ReadTrivyBOM(tmp.Name())
+	return nil
 }

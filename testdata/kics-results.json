@@ -1,0 +1,10 @@
+{
+  "severity_counters": { "CRITICAL": 1, "HIGH": 2, "MEDIUM": 0, "LOW": 1, "INFO": 3 },
+  "total_counter": 7,
+  "queries": [
+    { "query_name": "Seccomp Profile Is Not Configured", "severity": "HIGH",
+      "files": [ { "file_name": "templates/deployment.yaml", "line": 42 } ] },
+    { "query_name": "Container Running As Root", "severity": "CRITICAL",
+      "files": [ { "file_name": "templates/deployment.yaml", "line": 40 } ] }
+  ]
+}

@@ -95,6 +95,9 @@ func Merge(logs ...*Log) *Log {
 // from each result's referencing rule (Trivy: tags/security-severity).
 func CountBySeverity(l *Log) map[string]int {
 	counts := map[string]int{}
+	if l == nil {
+		return counts
+	}
 	for _, run := range l.Runs {
 		rules := map[string]Rule{}
 		for _, r := range run.Rules() {
@@ -142,6 +145,8 @@ func levelToSeverity(level string) string {
 		return "medium"
 	case "note":
 		return "low"
+	case "none":
+		return "info"
 	}
 	return ""
 }

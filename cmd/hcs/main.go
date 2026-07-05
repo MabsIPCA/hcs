@@ -1,16 +1,18 @@
-// Command hcs scans a Helm chart/repo and writes a merged CycloneDX SBOM.
+// Command hcs scans a Helm chart and writes a unified SARIF report + summary.
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 
-	cdx "github.com/CycloneDX/cyclonedx-go"
-	"github.com/MabsIPCA/hcs/internal/merge"
+	"github.com/MabsIPCA/hcs/internal/kicsreport"
 	"github.com/MabsIPCA/hcs/internal/runner"
+	"github.com/MabsIPCA/hcs/internal/sarif"
 	"github.com/MabsIPCA/hcs/internal/sbomio"
+	"github.com/MabsIPCA/hcs/internal/sev"
 	"github.com/MabsIPCA/hcs/internal/summary"
 )
 
@@ -19,71 +21,117 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: hcs scan <path> [flags]")
 		os.Exit(2)
 	}
-	// Contract: hcs scan <path> [flags]  — path is os.Args[2]; flags follow it.
 	fs := flag.NewFlagSet("scan", flag.ExitOnError)
 	kicsConfig := fs.String("kics-config", "", "path to KICS config file")
 	trivyConfig := fs.String("trivy-config", "", "path to Trivy config file")
-	output := fs.String("output", "hcs-sbom.json", "merged CycloneDX output path")
+	output := fs.String("output", "hcs.sarif", "unified SARIF output path")
 	summaryOut := fs.String("summary", "hcs-summary.md", "Markdown summary output path")
 	kicsBin := fs.String("kics-bin", "kics", "kics binary")
 	trivyBin := fs.String("trivy-bin", "trivy", "trivy binary")
 	queryPath := fs.String("kics-query-path", os.Getenv("KICS_QUERIES_PATH"), "KICS query assets path")
+	failOn := fs.String("fail-on", "", "exit non-zero if any finding is >= this severity (critical|high|medium|low)")
 	fs.Parse(os.Args[3:])
 	scanPath := os.Args[2]
 
-	if err := run(scanPath, *kicsConfig, *trivyConfig, *output, *summaryOut,
-		runner.Runner{KICSBin: *kicsBin, TrivyBin: *trivyBin, KICSQueryPath: *queryPath}); err != nil {
+	code, err := run(scanPath, *kicsConfig, *trivyConfig, *output, *summaryOut, *failOn,
+		runner.Runner{KICSBin: *kicsBin, TrivyBin: *trivyBin, KICSQueryPath: *queryPath})
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "hcs:", err)
 		os.Exit(1)
 	}
+	os.Exit(code)
 }
 
-func run(scanPath, kicsConfig, trivyConfig, output, summaryOut string, r runner.Runner) error {
-	tmp, err := os.MkdirTemp("", "hcs-kics-*")
+func run(scanPath, kicsConfig, trivyConfig, output, summaryOut, failOn string, r runner.Runner) (int, error) {
+	tmp, err := os.MkdirTemp("", "hcs-*")
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer os.RemoveAll(tmp)
 
-	bomPath, err := r.KICSImageBOM(scanPath, kicsConfig, tmp)
+	kout, err := r.KICSScan(scanPath, kicsConfig, tmp)
 	if err != nil {
-		return fmt.Errorf("kics: %w", err)
+		return 0, fmt.Errorf("kics: %w", err)
 	}
-	images, err := sbomio.ReadKICSImages(bomPath)
+	misc, err := kicsreport.Read(kout.JSON)
 	if err != nil {
-		return fmt.Errorf("read kics bom: %w", err)
+		return 0, fmt.Errorf("read kics json: %w", err)
+	}
+	kicsSarif, err := sarif.Read(kout.SARIF)
+	if err != nil {
+		return 0, fmt.Errorf("read kics sarif: %w", err)
+	}
+	images, err := sbomio.ReadKICSImages(kout.ImageBOM)
+	if err != nil {
+		return 0, fmt.Errorf("read kics image-bom: %w", err)
 	}
 
-	trivyBOMs := map[string]*cdx.BOM{}
-	for _, img := range images {
-		tb, err := r.TrivyImageBOM(img.ScanRef(), trivyConfig)
-		if err != nil {
+	logs := []*sarif.Log{kicsSarif}
+	var imageVulns []summary.ImageVulns
+	for i, img := range images {
+		out := filepath.Join(tmp, fmt.Sprintf("trivy-%d.sarif", i))
+		if err := r.TrivyImageSARIF(img.ScanRef(), trivyConfig, out); err != nil {
 			fmt.Fprintf(os.Stderr, "hcs: warning: trivy scan of %s failed: %v\n", img.ScanRef(), err)
+			imageVulns = append(imageVulns, summary.ImageVulns{Display: display(img), Source: firstSource(img), Counts: map[string]int{}})
 			continue
 		}
-		trivyBOMs[img.BOMRef] = tb
+		tl, err := sarif.Read(out)
+		if err != nil {
+			return 0, fmt.Errorf("read trivy sarif: %w", err)
+		}
+		logs = append(logs, tl)
+		imageVulns = append(imageVulns, summary.ImageVulns{
+			Display: display(img), Source: firstSource(img), Counts: sarif.CountBySeverity(tl),
+		})
 	}
 
-	target := filepath.Base(scanPath)
-	if abs, err := filepath.Abs(scanPath); err == nil {
-		target = filepath.Base(abs)
+	merged := sarif.Merge(logs...)
+	if err := writeJSON(output, merged); err != nil {
+		return 0, err
 	}
-	if target == "." || target == "/" || target == "" {
-		target = "chart"
+	if err := os.WriteFile(summaryOut, []byte(summary.Render(misc, imageVulns)), 0o644); err != nil {
+		return 0, err
 	}
-	merged := merge.Merge(target, images, trivyBOMs)
+	fmt.Printf("hcs: wrote %s (%d images, %d misconfig findings) and %s\n",
+		output, len(images), len(misc.Findings), summaryOut)
 
-	if err := writeBOM(output, merged); err != nil {
-		return err
+	if failOn != "" && exceeds(misc, imageVulns, failOn) {
+		fmt.Fprintf(os.Stderr, "hcs: findings at or above %q severity\n", failOn)
+		return 1, nil
 	}
-	if err := os.WriteFile(summaryOut, []byte(summary.Render(merged)), 0o644); err != nil {
-		return err
-	}
-	fmt.Printf("hcs: wrote %s (%d images) and %s\n", output, len(images), summaryOut)
-	return nil
+	return 0, nil
 }
 
-func writeBOM(path string, bom *cdx.BOM) (retErr error) {
+func exceeds(misc *kicsreport.Report, images []summary.ImageVulns, threshold string) bool {
+	for s, n := range misc.Counts {
+		if n > 0 && sev.AtLeast(s, threshold) {
+			return true
+		}
+	}
+	for _, img := range images {
+		for s, n := range img.Counts {
+			if n > 0 && sev.AtLeast(s, threshold) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func display(img sbomio.Image) string { return img.Name + ":" + img.Version }
+
+func firstSource(img sbomio.Image) string {
+	if len(img.Sources) == 0 {
+		return "-"
+	}
+	s := img.Sources[0]
+	if s.Line > 0 {
+		return fmt.Sprintf("%s:%d", s.File, s.Line)
+	}
+	return s.File
+}
+
+func writeJSON(path string, v any) (retErr error) {
 	f, err := os.Create(path)
 	if err != nil {
 		return err
@@ -93,7 +141,7 @@ func writeBOM(path string, bom *cdx.BOM) (retErr error) {
 			retErr = cerr
 		}
 	}()
-	enc := cdx.NewBOMEncoder(f, cdx.BOMFileFormatJSON)
-	enc.SetPretty(true)
-	return enc.Encode(bom)
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	return enc.Encode(v)
 }

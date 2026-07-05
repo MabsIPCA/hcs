@@ -38,7 +38,10 @@ func (r Runner) KICSImageBOM(scanPath, kicsConfig, outDir string) (string, error
 	return filepath.Join(outDir, "kics-image-bom.json"), nil
 }
 
-// TrivyImageBOM runs `trivy image <ref> --format cyclonedx` and parses the BOM.
+// TrivyImageBOM runs `trivy image <ref> --format cyclonedx --scanners vuln`
+// and parses the BOM. The explicit --scanners vuln is required because
+// `--format cyclonedx` otherwise disables the vulnerability scanner, which
+// would leave the merged SBOM without any CVEs.
 func (r Runner) TrivyImageBOM(ref, trivyConfig string) (*cdx.BOM, error) {
 	tmp, err := os.CreateTemp("", "trivy-*.cdx.json")
 	if err != nil {
@@ -47,7 +50,7 @@ func (r Runner) TrivyImageBOM(ref, trivyConfig string) (*cdx.BOM, error) {
 	tmp.Close()
 	defer os.Remove(tmp.Name())
 
-	args := []string{"image", ref, "--format", "cyclonedx", "--output", tmp.Name()}
+	args := []string{"image", ref, "--format", "cyclonedx", "--scanners", "vuln", "--output", tmp.Name()}
 	if trivyConfig != "" {
 		args = append(args, "--config", trivyConfig)
 	}

@@ -89,9 +89,13 @@ so normalization is tool-aware:
 - **Trivy:** prefer `rule.properties["security-severity"]` (CVSS numeric →
   bucket), fall back to the `CRITICAL/HIGH/MEDIUM/LOW` tag in
   `rule.properties.tags`.
-- **KICS:** map KICS's SARIF severity representation to the same buckets.
-  *(Exact field to be confirmed against a real KICS SARIF at implementation —
-  see Open items.)*
+- **KICS:** KICS's SARIF encodes severity only as the rule's
+  `defaultConfiguration.level` (`error`/`warning`/`note`), collapsing CRITICAL
+  and HIGH into `error` — too coarse for the summary/gating. So the summary and
+  `--fail-on` read KICS's **native JSON** (`results.json` → `severity_counters`
+  + `queries[].severity`), which carries exact CRITICAL/HIGH/MEDIUM/LOW/INFO.
+  KICS's SARIF is used only in the merged report. This is why the KICS run
+  requests `--report-formats json,sarif`.
 
 Buckets: `critical > high > medium > low > info`.
 
@@ -149,8 +153,10 @@ name are unchanged. The sticky-comment marker `<!-- hcs-sbom -->` becomes
 
 ## Open items (resolve during implementation)
 
-1. Confirm KICS SARIF **output filename** (expected `results.sarif`) and the
-   exact **severity field** by generating a real KICS SARIF from a chart.
+1. ~~Confirm KICS SARIF severity field~~ **Resolved:** KICS SARIF has no raw
+   severity (rule `level` only); the summary/gating use KICS JSON instead (see
+   Severity normalization). Still verify the KICS **output filenames**
+   (`results.json` / `results.sarif`) against the real binary during Task 8.
 2. Confirm Trivy image SARIF location handling — the "location" is the image
    ref, not a source line; decide whether to enrich Trivy results with chart
    provenance (which template pulled the image) from `kics-image-bom.json`, or

@@ -30,3 +30,15 @@ func TestCountBySeverity_Trivy(t *testing.T) {
 		t.Errorf("counts = %v", counts)
 	}
 }
+
+func TestCountBySeverity_KICSLevelFallback(t *testing.T) {
+	kics, err := Read("../../testdata/kics.sarif")
+	if err != nil {
+		t.Fatalf("Read kics: %v", err)
+	}
+	counts := CountBySeverity(kics)
+	// kics.sarif has one rule with defaultConfiguration.level "error" -> high
+	if counts["high"] != 1 {
+		t.Errorf("counts = %v, want high=1", counts)
+	}
+}

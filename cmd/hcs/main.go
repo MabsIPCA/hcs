@@ -81,7 +81,9 @@ func run(scanPath, kicsConfig, trivyConfig, output, summaryOut, failOn string, r
 		}
 		tl, err := sarif.Read(out)
 		if err != nil {
-			return 0, fmt.Errorf("read trivy sarif: %w", err)
+			fmt.Fprintf(os.Stderr, "hcs: warning: reading trivy SARIF for %s failed: %v\n", img.ScanRef(), err)
+			imageVulns = append(imageVulns, summary.ImageVulns{Display: display(img), Source: firstSource(img), Counts: map[string]int{}})
+			continue
 		}
 		logs = append(logs, tl)
 		imageVulns = append(imageVulns, summary.ImageVulns{

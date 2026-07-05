@@ -53,6 +53,9 @@ func Read(path string) (*Report, error) {
 	}
 	for _, q := range raw.Queries {
 		s := sev.Normalize(q.Severity)
+		if s == "" {
+			continue
+		}
 		file, line := "", 0
 		if len(q.Files) > 0 {
 			file, line = q.Files[0].FileName, q.Files[0].Line

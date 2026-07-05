@@ -14,7 +14,7 @@ inputs:
     description: "Unified SARIF output path"
     default: "hcs.sarif"
   fail-on:
-    description: "Exit non-zero if any finding is >= this severity (critical|high|medium|low)"
+    description: "Exit non-zero if any finding is >= this severity (critical|high|medium|low|info)"
     default: ""
   comment:
     description: "Post the findings as a PR comment"
@@ -33,7 +33,7 @@ runs:
           ${{ inputs.kics-config && format('--kics-config "{0}"', inputs.kics-config) || '' }} \
           ${{ inputs.trivy-config && format('--trivy-config "{0}"', inputs.trivy-config) || '' }}
     - name: Upsert PR comment
-      if: ${{ inputs.comment == 'true' && github.event_name == 'pull_request' }}
+      if: ${{ always() && inputs.comment == 'true' && github.event_name == 'pull_request' }}
       uses: actions/github-script@v7
       with:
         script: |
@@ -51,10 +51,12 @@ runs:
           }
     - name: Upload SARIF to code scanning
       if: always()
+      continue-on-error: true
       uses: github/codeql-action/upload-sarif@v3
       with:
         sarif_file: ${{ inputs.output }}
     - name: Upload SARIF artifact
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: hcs-sarif

@@ -113,7 +113,7 @@ The repository ships a composite Action (`action.yml`) that:
 | `kics-config` | _(none)_ | Path to a KICS config file |
 | `trivy-config` | _(none)_ | Path to a Trivy config file |
 | `output` | `hcs.sarif` | Unified SARIF output path |
-| `fail-on` | _(none)_ | Exit non-zero if any finding is at or above this severity (`critical`, `high`, `medium`, `low`) |
+| `fail-on` | _(none)_ | Exit non-zero if any finding is at or above this severity (`critical`, `high`, `medium`, `low`, `info`) |
 | `comment` | `true` | Post/update a PR comment with the findings |
 
 ### Required permissions

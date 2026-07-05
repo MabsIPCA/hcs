@@ -1,6 +1,6 @@
-# hcs — Helm Chart SBOM Scanner
+# hcs — Helm Chart Scanner
 
-`hcs` scans a Helm chart repository and produces a merged [CycloneDX 1.5](https://cyclonedx.org/) Software Bill of Materials (SBOM) of every container image referenced in the chart, together with a Markdown summary suitable for a GitHub PR comment.
+`hcs` scans a Helm chart repository and produces a unified [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) report combining Helm misconfiguration findings and container image vulnerabilities for every image referenced in the chart, together with a Markdown summary suitable for a GitHub PR comment.
 
 ---
 
@@ -12,19 +12,16 @@ Helm chart repo
       ▼
   KICS (experimental Helm render + --image-bom)
       │  discovers every image referenced in chart templates
+      │  emits misconfiguration findings as SARIF
       │  attaches chart provenance (which template/values key)
       ▼
-  Trivy (trivy image --format cyclonedx)
-      │  scans each image for OS + language packages and CVEs
+  Trivy (trivy image --format sarif)
+      │  scans each image for OS + language packages and CVEs, as SARIF
       ▼
-  merge (internal/merge)
-      │  builds one CycloneDX 1.5 SBOM:
-      │    • each image → a "container" component
-      │    • packages nested as sub-components
-      │    • vulnerabilities aggregated and rewritten with image BOM-ref
-      │    • chart-provenance metadata preserved as properties
+  merge (internal/sarif)
+      │  merges the KICS run and every Trivy run into one SARIF 2.1.0 log
       ▼
-  hcs-sbom.json   (merged SBOM)
+  hcs.sarif       (unified SARIF: misconfigs + image CVEs)
   hcs-summary.md  (Markdown summary → PR comment)
 ```
 
@@ -38,8 +35,9 @@ hcs scan <path> [flags]
 
 | Flag | Default | Description |
 |---|---|---|
-| `--output` | `hcs-sbom.json` | Path for the merged CycloneDX JSON output |
+| `--output` | `hcs.sarif` | Path for the unified SARIF output |
 | `--summary` | `hcs-summary.md` | Path for the Markdown summary output |
+| `--fail-on` | _(none)_ | Exit non-zero if any finding is at or above this severity (`critical`, `high`, `medium`, `low`, `info`) |
 | `--kics-config` | _(none)_ | Path to a KICS config file (tunes the KICS run) |
 | `--trivy-config` | _(none)_ | Path to a Trivy config file (tunes the Trivy run) |
 | `--kics-bin` | `kics` | Path/name of the KICS binary |
@@ -50,11 +48,14 @@ hcs scan <path> [flags]
 
 ```bash
 hcs scan ./my-chart \
-  --output sbom.json \
+  --output hcs.sarif \
   --summary summary.md \
+  --fail-on high \
   --kics-config .kics.yaml \
   --trivy-config trivy.yaml
 ```
+
+With `--fail-on high`, `hcs` exits `1` if any misconfiguration or image vulnerability is `high` or `critical` severity — useful for gating a CI job while still writing the SARIF/summary output for inspection.
 
 ---
 
@@ -68,7 +69,7 @@ The published image bundles KICS (built from `MabsIPCA/kics@feat/image-bom`, whi
 docker run --rm \
   -v "$(pwd):/workspace" -w /workspace \
   ghcr.io/mabsipca/hcs:latest scan . \
-  --output hcs-sbom.json \
+  --output hcs.sarif \
   --summary hcs-summary.md
 ```
 
@@ -101,7 +102,8 @@ The repository ships a composite Action (`action.yml`) that:
 
 1. Runs `hcs scan` via the Docker image.
 2. On pull requests: **upserts a sticky comment** (identified by an HTML marker) with the Markdown summary — the same comment is updated on every new commit to the PR, keeping the thread tidy.
-3. Uploads `hcs-sbom.json` as a workflow artifact.
+3. Uploads `hcs.sarif` to GitHub code scanning (`github/codeql-action/upload-sarif@v3`), so findings show up under the repository's **Security → Code scanning** tab.
+4. Uploads `hcs.sarif` as a workflow artifact.
 
 ### Inputs
 
@@ -110,23 +112,25 @@ The repository ships a composite Action (`action.yml`) that:
 | `path` | `.` | Path to the repo/chart to scan |
 | `kics-config` | _(none)_ | Path to a KICS config file |
 | `trivy-config` | _(none)_ | Path to a Trivy config file |
-| `output` | `hcs-sbom.json` | Merged SBOM output path |
+| `output` | `hcs.sarif` | Unified SARIF output path |
+| `fail-on` | _(none)_ | Exit non-zero if any finding is at or above this severity (`critical`, `high`, `medium`, `low`) |
 | `comment` | `true` | Post/update a PR comment with the findings |
 
 ### Required permissions
 
-The workflow must grant `pull-requests: write` so the Action can post or update the PR comment:
+The workflow must grant `pull-requests: write` so the Action can post or update the PR comment, and `security-events: write` so it can upload the SARIF results to code scanning:
 
 ```yaml
 permissions:
   contents: read
   pull-requests: write
+  security-events: write
 ```
 
 ### Example workflow
 
 ```yaml
-name: Helm SBOM
+name: Helm Chart Scan
 on:
   pull_request:
   push:
@@ -134,8 +138,9 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  security-events: write
 jobs:
-  sbom:
+  scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -143,11 +148,12 @@ jobs:
         uses: ./
         with:
           path: "."
+          # fail-on: "high"
           # kics-config: ".kics.yaml"
           # trivy-config: "trivy.yaml"
 ```
 
-This workflow is also checked in at `.github/workflows/sbom.yml`.
+This workflow is also checked in at `.github/workflows/scan.yml`.
 
 ---
 
@@ -183,9 +189,9 @@ ignore-unfixed: true
 
 ## Output format
 
-**`hcs-sbom.json`** — CycloneDX 1.5 JSON SBOM:
-- `metadata.component`: the scanned chart as the root component.
-- `components`: one `container` component per discovered image, each containing its packages as nested sub-components.
-- `vulnerabilities`: all CVEs found by Trivy, each linked to the relevant image component via `affects[].ref`.
+**`hcs.sarif`** — a unified [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) log combining every run:
+- KICS Helm misconfiguration findings.
+- One Trivy vulnerability run per container image discovered in the chart.
+- Consumable directly by GitHub code scanning, `sarif-tools`, and other SARIF viewers.
 
-**`hcs-summary.md`** — Markdown table of images scanned, package counts, and vulnerability severity counts; used as the PR comment body.
+**`hcs-summary.md`** — Markdown summary with a misconfiguration severity table and an image-by-image vulnerability severity table; used as the PR comment body.

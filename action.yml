@@ -1,5 +1,5 @@
-name: "HCS Helm SBOM Scanner"
-description: "Scan a Helm chart with KICS + Trivy and comment the merged SBOM findings on the PR"
+name: "HCS Helm Chart Scanner"
+description: "Scan a Helm chart with KICS + Trivy and report a unified SARIF of findings"
 inputs:
   path:
     description: "Path to the repo/chart to scan"
@@ -11,8 +11,11 @@ inputs:
     description: "Path to a Trivy config file"
     default: ""
   output:
-    description: "Merged SBOM output path"
-    default: "hcs-sbom.json"
+    description: "Unified SARIF output path"
+    default: "hcs.sarif"
+  fail-on:
+    description: "Exit non-zero if any finding is >= this severity (critical|high|medium|low)"
+    default: ""
   comment:
     description: "Post the findings as a PR comment"
     default: "true"
@@ -26,6 +29,7 @@ runs:
           -v "${{ github.workspace }}:/workspace" -w /workspace \
           ghcr.io/mabsipca/hcs:latest scan "${{ inputs.path }}" \
           --output "${{ inputs.output }}" --summary "hcs-summary.md" \
+          ${{ inputs.fail-on && format('--fail-on "{0}"', inputs.fail-on) || '' }} \
           ${{ inputs.kics-config && format('--kics-config "{0}"', inputs.kics-config) || '' }} \
           ${{ inputs.trivy-config && format('--trivy-config "{0}"', inputs.trivy-config) || '' }}
     - name: Upsert PR comment
@@ -35,7 +39,7 @@ runs:
         script: |
           const fs = require('fs');
           const body = fs.readFileSync('hcs-summary.md', 'utf8');
-          const marker = '<!-- hcs-sbom -->';
+          const marker = '<!-- hcs -->';
           const {owner, repo} = context.repo;
           const issue_number = context.payload.pull_request.number;
           const {data: comments} = await github.rest.issues.listComments({owner, repo, issue_number});
@@ -45,8 +49,13 @@ runs:
           } else {
             await github.rest.issues.createComment({owner, repo, issue_number, body});
           }
-    - name: Upload SBOM artifact
+    - name: Upload SARIF to code scanning
+      if: always()
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.output }}
+    - name: Upload SARIF artifact
       uses: actions/upload-artifact@v4
       with:
-        name: hcs-sbom
+        name: hcs-sarif
         path: ${{ inputs.output }}

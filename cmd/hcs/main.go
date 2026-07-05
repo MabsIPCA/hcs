@@ -29,7 +29,7 @@ func main() {
 	kicsBin := fs.String("kics-bin", "kics", "kics binary")
 	trivyBin := fs.String("trivy-bin", "trivy", "trivy binary")
 	queryPath := fs.String("kics-query-path", os.Getenv("KICS_QUERIES_PATH"), "KICS query assets path")
-	failOn := fs.String("fail-on", "", "exit non-zero if any finding is >= this severity (critical|high|medium|low)")
+	failOn := fs.String("fail-on", "", "exit non-zero if any finding is >= this severity (critical|high|medium|low|info)")
 	fs.Parse(os.Args[3:])
 	scanPath := os.Args[2]
 
@@ -43,6 +43,10 @@ func main() {
 }
 
 func run(scanPath, kicsConfig, trivyConfig, output, summaryOut, failOn string, r runner.Runner) (int, error) {
+	if failOn != "" && sev.Rank(failOn) == 0 {
+		return 0, fmt.Errorf("invalid --fail-on %q (want critical, high, medium, low, or info)", failOn)
+	}
+
 	tmp, err := os.MkdirTemp("", "hcs-*")
 	if err != nil {
 		return 0, err

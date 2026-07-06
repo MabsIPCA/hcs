@@ -16,8 +16,12 @@ type Log struct {
 	Runs    []Run  `json:"runs"`
 }
 type Run struct {
-	Tool    Tool     `json:"tool"`
-	Results []Result `json:"results"`
+	Tool              Tool               `json:"tool"`
+	Results           []Result           `json:"results"`
+	AutomationDetails *AutomationDetails `json:"automationDetails,omitempty"`
+}
+type AutomationDetails struct {
+	ID string `json:"id"`
 }
 type Tool struct {
 	Driver Driver `json:"driver"`
@@ -89,6 +93,39 @@ func Merge(logs ...*Log) *Log {
 		out.Runs = append(out.Runs, l.Runs...)
 	}
 	return out
+}
+
+// Anchor rewrites every result's location in the log to (uri, line). Trivy
+// image findings otherwise point at the image name, which is not a file in the
+// repository; anchoring them to the chart file that references the image makes
+// them valid GitHub code-scanning alerts on that line. A blank uri is a no-op.
+func Anchor(l *Log, uri string, line int) {
+	if l == nil || uri == "" {
+		return
+	}
+	for ri := range l.Runs {
+		for i := range l.Runs[ri].Results {
+			loc := Location{PhysicalLocation: PhysicalLocation{
+				ArtifactLocation: ArtifactLocation{URI: uri},
+			}}
+			if line > 0 {
+				loc.PhysicalLocation.Region = &Region{StartLine: line}
+			}
+			l.Runs[ri].Results[i].Locations = []Location{loc}
+		}
+	}
+}
+
+// SetCategory stamps automationDetails.id on every run. GitHub code scanning
+// keys an analysis by (tool name, category), so distinct categories stop
+// same-named runs (one Trivy run per image) from overwriting each other.
+func SetCategory(l *Log, id string) {
+	if l == nil {
+		return
+	}
+	for ri := range l.Runs {
+		l.Runs[ri].AutomationDetails = &AutomationDetails{ID: id}
+	}
 }
 
 // CountBySeverity counts results per normalized severity, reading the severity

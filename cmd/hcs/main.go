@@ -92,6 +92,7 @@ func run(scanPath, kicsConfig, trivyConfig, output, summaryOut, failOn string, r
 		// collide in GitHub code scanning.
 		file, line := relSource(img)
 		sarif.Anchor(tl, file, line)
+		sarif.PrefixMessages(tl, "Image `"+img.ScanRef()+"`: ")
 		sarif.SetCategory(tl, "trivy/"+img.ScanRef())
 		logs = append(logs, tl)
 		imageVulns = append(imageVulns, summary.ImageVulns{

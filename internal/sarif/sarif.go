@@ -116,6 +116,21 @@ func Anchor(l *Log, uri string, line int) {
 	}
 }
 
+// PrefixMessages prepends prefix to every result's message text. Once Trivy
+// findings are anchored to the chart file (Anchor), the message is what tells a
+// reader which image the CVE actually came from, so each alert stays traceable
+// to its image even though its location points at chart.yaml/values.yaml.
+func PrefixMessages(l *Log, prefix string) {
+	if l == nil || prefix == "" {
+		return
+	}
+	for ri := range l.Runs {
+		for i := range l.Runs[ri].Results {
+			l.Runs[ri].Results[i].Message.Text = prefix + l.Runs[ri].Results[i].Message.Text
+		}
+	}
+}
+
 // SetCategory stamps automationDetails.id on every run. GitHub code scanning
 // keys an analysis by (tool name, category), so distinct categories stop
 // same-named runs (one Trivy run per image) from overwriting each other.

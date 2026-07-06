@@ -1,6 +1,9 @@
 package sarif
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestReadAndMerge(t *testing.T) {
 	trivy, err := Read("../../testdata/trivy.sarif")
@@ -73,6 +76,22 @@ func TestAnchor(t *testing.T) {
 	Anchor(other, "", 0)
 	if other.Runs[0].Results[0].Locations[0].PhysicalLocation.ArtifactLocation.URI == "helm/app/values.yaml" {
 		t.Error("blank uri should not rewrite locations")
+	}
+}
+
+func TestPrefixMessages(t *testing.T) {
+	trivy, _ := Read("../../testdata/trivy.sarif")
+	const prefix = "Image `library/nginx:1.21.0`: "
+	PrefixMessages(trivy, prefix)
+	for _, run := range trivy.Runs {
+		if len(run.Results) == 0 {
+			t.Fatal("fixture must have results")
+		}
+		for _, res := range run.Results {
+			if !strings.HasPrefix(res.Message.Text, prefix) {
+				t.Errorf("message not prefixed with image: %q", res.Message.Text)
+			}
+		}
 	}
 }
 

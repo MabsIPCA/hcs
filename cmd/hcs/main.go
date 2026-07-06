@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/MabsIPCA/hcs/internal/kicsreport"
 	"github.com/MabsIPCA/hcs/internal/runner"
@@ -85,6 +86,13 @@ func run(scanPath, kicsConfig, trivyConfig, output, summaryOut, failOn string, r
 			imageVulns = append(imageVulns, summary.ImageVulns{Display: display(img), Source: firstSource(img), Counts: map[string]int{}})
 			continue
 		}
+		// Anchor the image's CVEs to the chart file:line that references it
+		// (Trivy points them at the image name, which is not a repo file), and
+		// give each image its own category so same-named Trivy runs don't
+		// collide in GitHub code scanning.
+		file, line := relSource(img)
+		sarif.Anchor(tl, file, line)
+		sarif.SetCategory(tl, "trivy/"+img.ScanRef())
 		logs = append(logs, tl)
 		imageVulns = append(imageVulns, summary.ImageVulns{
 			Display: display(img), Source: firstSource(img), Counts: sarif.CountBySeverity(tl),
@@ -126,15 +134,32 @@ func exceeds(misc *kicsreport.Report, images []summary.ImageVulns, threshold str
 
 func display(img sbomio.Image) string { return img.Name + ":" + img.Version }
 
-func firstSource(img sbomio.Image) string {
+// relSource returns the first provenance source for an image, with the file
+// made relative to the working directory (== repo root under the Action) so it
+// is a valid repo-relative path for both the summary and SARIF locations.
+func relSource(img sbomio.Image) (string, int) {
 	if len(img.Sources) == 0 {
-		return "-"
+		return "", 0
 	}
 	s := img.Sources[0]
-	if s.Line > 0 {
-		return fmt.Sprintf("%s:%d", s.File, s.Line)
+	file := s.File
+	if cwd, err := os.Getwd(); err == nil {
+		if rel, err := filepath.Rel(cwd, file); err == nil && !strings.HasPrefix(rel, "..") {
+			file = rel
+		}
 	}
-	return s.File
+	return file, s.Line
+}
+
+func firstSource(img sbomio.Image) string {
+	file, line := relSource(img)
+	if file == "" {
+		return "-"
+	}
+	if line > 0 {
+		return fmt.Sprintf("%s:%d", file, line)
+	}
+	return file
 }
 
 func writeJSON(path string, v any) (retErr error) {

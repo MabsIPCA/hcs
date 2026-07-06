@@ -42,3 +42,46 @@ func TestCountBySeverity_KICSLevelFallback(t *testing.T) {
 		t.Errorf("counts = %v, want high=1", counts)
 	}
 }
+
+func TestAnchor(t *testing.T) {
+	// trivy.sarif results point at the image name; anchor them to a chart file.
+	trivy, err := Read("../../testdata/trivy.sarif")
+	if err != nil {
+		t.Fatalf("Read trivy: %v", err)
+	}
+	Anchor(trivy, "helm/app/values.yaml", 42)
+	for _, run := range trivy.Runs {
+		if len(run.Results) == 0 {
+			t.Fatal("fixture must have results")
+		}
+		for _, res := range run.Results {
+			if len(res.Locations) != 1 {
+				t.Fatalf("want 1 location, got %d", len(res.Locations))
+			}
+			pl := res.Locations[0].PhysicalLocation
+			if pl.ArtifactLocation.URI != "helm/app/values.yaml" {
+				t.Errorf("uri = %q, want chart file", pl.ArtifactLocation.URI)
+			}
+			if pl.Region == nil || pl.Region.StartLine != 42 {
+				t.Errorf("region = %+v, want startLine 42", pl.Region)
+			}
+		}
+	}
+
+	// blank uri is a no-op (keeps the original image-name location)
+	other, _ := Read("../../testdata/trivy.sarif")
+	Anchor(other, "", 0)
+	if other.Runs[0].Results[0].Locations[0].PhysicalLocation.ArtifactLocation.URI == "helm/app/values.yaml" {
+		t.Error("blank uri should not rewrite locations")
+	}
+}
+
+func TestSetCategory(t *testing.T) {
+	trivy, _ := Read("../../testdata/trivy.sarif")
+	SetCategory(trivy, "trivy/library/nginx:1.21")
+	for _, run := range trivy.Runs {
+		if run.AutomationDetails == nil || run.AutomationDetails.ID != "trivy/library/nginx:1.21" {
+			t.Errorf("automationDetails = %+v", run.AutomationDetails)
+		}
+	}
+}

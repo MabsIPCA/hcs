@@ -63,7 +63,7 @@ With `--fail-on high`, `hcs` exits `1` if any misconfiguration or image vulnerab
 
 The image is published to `ghcr.io/mabsipca/hcs` by `.github/workflows/publish.yml` on every `v*` tag push. Consumers should reference a pinned version tag (e.g. `ghcr.io/mabsipca/hcs:v1.2.3`) rather than `latest`.
 
-The published image bundles KICS (built from `MabsIPCA/kics@feat/image-bom`, which adds `--image-bom` support) and Trivy, so no local tool installation is required.
+The published image bundles KICS (built from `MabsIPCA/kics@master`, which includes `--image-bom` support) and Trivy, so no local tool installation is required.
 
 ```bash
 docker run --rm \
@@ -90,7 +90,7 @@ docker build -t hcs .
 # Override the KICS fork/branch if needed:
 docker build \
   --build-arg KICS_REPO=https://github.com/MabsIPCA/kics \
-  --build-arg KICS_REF=feat/image-bom \
+  --build-arg KICS_REF=master \
   -t hcs .
 ```
 

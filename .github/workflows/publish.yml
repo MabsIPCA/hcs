@@ -42,4 +42,4 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             KICS_REPO=https://github.com/MabsIPCA/kics
-            KICS_REF=feat/image-bom
+            KICS_REF=master

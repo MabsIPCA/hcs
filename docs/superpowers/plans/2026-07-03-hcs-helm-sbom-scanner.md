@@ -12,7 +12,7 @@
 
 - Module path: `github.com/MabsIPCA/hcs`. Go 1.22+.
 - SBOM library: `github.com/CycloneDX/cyclonedx-go v0.11.0`. Output: **CycloneDX 1.5 JSON**.
-- KICS is obtained by building from `KICS_REPO=https://github.com/MabsIPCA/kics` at `KICS_REF=feat/image-bom` (Docker build ARGs).
+- KICS is obtained by building from `KICS_REPO=https://github.com/MabsIPCA/kics` at `KICS_REF=master` (Docker build ARGs).
 - KICS image BoM filename is fixed: `kics-image-bom.json`.
 - Sticky PR comment marker: `<!-- hcs-sbom -->` (must be the last line of the summary).
 - Every code task is TDD: write test → watch fail → implement → watch pass → commit.
@@ -1155,7 +1155,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 # --- Build KICS (fork with --image-bom) ---
 ARG KICS_REPO=https://github.com/MabsIPCA/kics
-ARG KICS_REF=feat/image-bom
+ARG KICS_REF=master
 FROM golang:1.26-bookworm AS kics-build
 ARG KICS_REPO
 ARG KICS_REF

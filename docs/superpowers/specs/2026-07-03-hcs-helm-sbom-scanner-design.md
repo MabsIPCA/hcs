@@ -106,7 +106,7 @@ Multi-stage:
 
 - **Stage `kics-build`:** builds KICS from source. Build ARGs
   `KICS_REPO` (default `https://github.com/MabsIPCA/kics`) and
-  `KICS_REF` (default `feat/image-bom`), so the image can track upstream once the
+  `KICS_REF` (default `master`), so the image can track upstream once the
   feature is merged. Produces the `kics` binary and copies its `assets/` (KICS
   needs `assets/queries` + `assets/libraries` at runtime).
 - **Stage `hcs-build`:** builds the `hcs` Go binary.

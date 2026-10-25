@@ -2,7 +2,7 @@
 
 # --- Build KICS (fork with --image-bom) ---
 ARG KICS_REPO=https://github.com/MabsIPCA/kics
-ARG KICS_REF=feat/image-bom
+ARG KICS_REF=master
 FROM golang:1.26-bookworm AS kics-build
 ARG KICS_REPO
 ARG KICS_REF

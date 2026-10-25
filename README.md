@@ -37,6 +37,7 @@ hcs scan <path> [<path> ...] [flags]
 |---|---|---|
 | `--output` | `hcs.sarif` | Path for the unified SARIF output |
 | `--summary` | `hcs-summary.md` | Path for the Markdown summary output |
+| `--kics-results` | `kics_results.json` | Path for the native KICS JSON output |
 | `--fail-on` | _(none)_ | Exit non-zero if any finding is at or above this severity (`critical`, `high`, `medium`, `low`, `info`) |
 | `--kics-config` | _(none)_ | Path to a KICS config file (tunes the KICS run) |
 | `--trivy-config` | _(none)_ | Path to a Trivy config file (tunes the Trivy run) |
@@ -110,7 +111,7 @@ The repository ships a composite Action (`action.yml`) that:
 1. Runs `hcs scan` via the Docker image.
 2. On pull requests: **upserts a sticky comment** (identified by an HTML marker) with the Markdown summary — the same comment is updated on every new commit to the PR, keeping the thread tidy.
 3. Uploads `hcs.sarif` to GitHub code scanning (`github/codeql-action/upload-sarif@v3`), so findings show up under the repository's **Security → Code scanning** tab.
-4. Uploads `hcs.sarif` as a workflow artifact.
+4. Uploads `hcs.sarif` as the `hcs-sarif` artifact, and uploads `hcs-summary.md` together with `kics_results.json` as the `hcs-summary` artifact.
 
 ### Inputs
 
@@ -204,3 +205,5 @@ ignore-unfixed: true
 - Consumable directly by GitHub code scanning, `sarif-tools`, and other SARIF viewers.
 
 **`hcs-summary.md`** — Markdown summary with a misconfiguration severity table and an image-by-image vulnerability severity table; used as the PR comment body.
+
+**`kics_results.json`** — Native KICS JSON results, preserving the original query details and severity counters.

@@ -35,7 +35,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	code, err := run(scanPaths, opts.kicsConfig, opts.trivyConfig, opts.output, opts.summaryOut, opts.failOn,
+	code, err := run(scanPaths, opts.kicsConfig, opts.trivyConfig, opts.output, opts.summaryOut, opts.kicsResultsOut, opts.failOn,
 		runner.Runner{KICSBin: opts.kicsBin, TrivyBin: opts.trivyBin, KICSQueryPath: opts.queryPath})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "hcs:", err)
@@ -45,14 +45,15 @@ func main() {
 }
 
 type scanOptions struct {
-	kicsConfig  string
-	trivyConfig string
-	output      string
-	summaryOut  string
-	kicsBin     string
-	trivyBin    string
-	queryPath   string
-	failOn      string
+	kicsConfig     string
+	trivyConfig    string
+	output         string
+	summaryOut     string
+	kicsResultsOut string
+	kicsBin        string
+	trivyBin       string
+	queryPath      string
+	failOn         string
 }
 
 func printUsage() {
@@ -69,6 +70,7 @@ func parseScanArgs(args []string) ([]string, scanOptions, error) {
 	fs.StringVar(&opts.trivyConfig, "trivy-config", "", "path to Trivy config file")
 	fs.StringVar(&opts.output, "output", "hcs.sarif", "unified SARIF output path")
 	fs.StringVar(&opts.summaryOut, "summary", "hcs-summary.md", "Markdown summary output path")
+	fs.StringVar(&opts.kicsResultsOut, "kics-results", "kics_results.json", "native KICS JSON output path")
 	fs.StringVar(&opts.kicsBin, "kics-bin", "kics", "kics binary")
 	fs.StringVar(&opts.trivyBin, "trivy-bin", "trivy", "trivy binary")
 	fs.StringVar(&opts.queryPath, "kics-query-path", os.Getenv("KICS_QUERIES_PATH"), "KICS query assets path")
@@ -123,7 +125,7 @@ func partitionScanArgs(fs *flag.FlagSet, args []string) (flagArgs, paths []strin
 	return flagArgs, paths, nil
 }
 
-func run(scanPaths []string, kicsConfig, trivyConfig, output, summaryOut, failOn string, r runner.Runner) (int, error) {
+func run(scanPaths []string, kicsConfig, trivyConfig, output, summaryOut, kicsResultsOut, failOn string, r runner.Runner) (int, error) {
 	if failOn != "" && sev.Rank(failOn) == 0 {
 		return 0, fmt.Errorf("invalid --fail-on %q (want critical, high, medium, low, or info)", failOn)
 	}
@@ -137,6 +139,13 @@ func run(scanPaths []string, kicsConfig, trivyConfig, output, summaryOut, failOn
 	kout, err := r.KICSScan(scanPaths, kicsConfig, tmp)
 	if err != nil {
 		return 0, fmt.Errorf("kics: %w", err)
+	}
+	kicsResults, err := os.ReadFile(kout.JSON)
+	if err != nil {
+		return 0, fmt.Errorf("read kics json: %w", err)
+	}
+	if err := os.WriteFile(kicsResultsOut, kicsResults, 0o644); err != nil {
+		return 0, fmt.Errorf("write kics json: %w", err)
 	}
 	misc, err := kicsreport.Read(kout.JSON)
 	if err != nil {
@@ -187,8 +196,8 @@ func run(scanPaths []string, kicsConfig, trivyConfig, output, summaryOut, failOn
 	if err := os.WriteFile(summaryOut, []byte(summary.Render(misc, imageVulns)), 0o644); err != nil {
 		return 0, err
 	}
-	fmt.Printf("hcs: wrote %s (%d images, %d misconfig findings) and %s\n",
-		output, len(images), len(misc.Findings), summaryOut)
+	fmt.Printf("hcs: wrote %s (%d images, %d misconfig findings), %s, and %s\n",
+		output, len(images), len(misc.Findings), summaryOut, kicsResultsOut)
 
 	if failOn != "" && exceeds(misc, imageVulns, failOn) {
 		fmt.Fprintf(os.Stderr, "hcs: findings at or above %q severity\n", failOn)

@@ -38,6 +38,7 @@ runs:
           -v "${{ github.workspace }}:/workspace" -w /workspace \
           ghcr.io/mabsipca/hcs:latest scan "${scan_paths[@]}" \
           --output "${{ inputs.output }}" --summary "hcs-summary.md" \
+          --kics-results "kics_results.json" \
           ${{ inputs.fail-on && format('--fail-on "{0}"', inputs.fail-on) || '' }} \
           ${{ inputs.kics-config && format('--kics-config "{0}"', inputs.kics-config) || '' }} \
           ${{ inputs.trivy-config && format('--trivy-config "{0}"', inputs.trivy-config) || '' }}
@@ -70,3 +71,11 @@ runs:
       with:
         name: hcs-sarif
         path: ${{ inputs.output }}
+    - name: Upload summary artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: hcs-summary
+        path: |
+          hcs-summary.md
+          kics_results.json

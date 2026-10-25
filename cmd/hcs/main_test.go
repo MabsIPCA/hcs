@@ -22,12 +22,24 @@ func TestParseScanArgsMultiplePaths(t *testing.T) {
 }
 
 func TestParseScanArgsSinglePathBackwardCompatible(t *testing.T) {
-	paths, opts, err := parseScanArgs([]string{".", "--summary", "summary.md"})
+	paths, opts, err := parseScanArgs([]string{
+		".", "--summary", "summary.md", "--kics-results", "raw-kics.json",
+	})
 	if err != nil {
 		t.Fatalf("parseScanArgs: %v", err)
 	}
-	if !reflect.DeepEqual(paths, []string{"."}) || opts.summaryOut != "summary.md" {
+	if !reflect.DeepEqual(paths, []string{"."}) || opts.summaryOut != "summary.md" || opts.kicsResultsOut != "raw-kics.json" {
 		t.Fatalf("paths = %v, options = %+v", paths, opts)
+	}
+}
+
+func TestParseScanArgsDefaultKICSResultsPath(t *testing.T) {
+	_, opts, err := parseScanArgs([]string{"."})
+	if err != nil {
+		t.Fatalf("parseScanArgs: %v", err)
+	}
+	if opts.kicsResultsOut != "kics_results.json" {
+		t.Fatalf("kics results path = %q", opts.kicsResultsOut)
 	}
 }
 

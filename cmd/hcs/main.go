@@ -1,8 +1,10 @@
-// Command hcs scans a Helm chart and writes a unified SARIF report + summary.
+// Command hcs scans one or more Helm chart paths and writes a unified SARIF
+// report + summary.
 package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -18,24 +20,23 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 3 || os.Args[1] != "scan" {
-		fmt.Fprintln(os.Stderr, "usage: hcs scan <path> [flags]")
+	if len(os.Args) < 2 || os.Args[1] != "scan" {
+		printUsage()
 		os.Exit(2)
 	}
-	fs := flag.NewFlagSet("scan", flag.ExitOnError)
-	kicsConfig := fs.String("kics-config", "", "path to KICS config file")
-	trivyConfig := fs.String("trivy-config", "", "path to Trivy config file")
-	output := fs.String("output", "hcs.sarif", "unified SARIF output path")
-	summaryOut := fs.String("summary", "hcs-summary.md", "Markdown summary output path")
-	kicsBin := fs.String("kics-bin", "kics", "kics binary")
-	trivyBin := fs.String("trivy-bin", "trivy", "trivy binary")
-	queryPath := fs.String("kics-query-path", os.Getenv("KICS_QUERIES_PATH"), "KICS query assets path")
-	failOn := fs.String("fail-on", "", "exit non-zero if any finding is >= this severity (critical|high|medium|low|info)")
-	fs.Parse(os.Args[3:])
-	scanPath := os.Args[2]
+	scanPaths, opts, err := parseScanArgs(os.Args[2:])
+	if errors.Is(err, flag.ErrHelp) {
+		printUsage()
+		return
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "hcs:", err)
+		printUsage()
+		os.Exit(2)
+	}
 
-	code, err := run(scanPath, *kicsConfig, *trivyConfig, *output, *summaryOut, *failOn,
-		runner.Runner{KICSBin: *kicsBin, TrivyBin: *trivyBin, KICSQueryPath: *queryPath})
+	code, err := run(scanPaths, opts.kicsConfig, opts.trivyConfig, opts.output, opts.summaryOut, opts.failOn,
+		runner.Runner{KICSBin: opts.kicsBin, TrivyBin: opts.trivyBin, KICSQueryPath: opts.queryPath})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "hcs:", err)
 		os.Exit(1)
@@ -43,7 +44,86 @@ func main() {
 	os.Exit(code)
 }
 
-func run(scanPath, kicsConfig, trivyConfig, output, summaryOut, failOn string, r runner.Runner) (int, error) {
+type scanOptions struct {
+	kicsConfig  string
+	trivyConfig string
+	output      string
+	summaryOut  string
+	kicsBin     string
+	trivyBin    string
+	queryPath   string
+	failOn      string
+}
+
+func printUsage() {
+	fmt.Fprintln(os.Stderr, "usage: hcs scan <path> [<path> ...] [flags]")
+}
+
+// parseScanArgs permits flags anywhere in the command while retaining all
+// positional arguments as scan paths. The standard flag package otherwise
+// stops parsing at the first positional argument.
+func parseScanArgs(args []string) ([]string, scanOptions, error) {
+	var opts scanOptions
+	fs := flag.NewFlagSet("scan", flag.ContinueOnError)
+	fs.StringVar(&opts.kicsConfig, "kics-config", "", "path to KICS config file")
+	fs.StringVar(&opts.trivyConfig, "trivy-config", "", "path to Trivy config file")
+	fs.StringVar(&opts.output, "output", "hcs.sarif", "unified SARIF output path")
+	fs.StringVar(&opts.summaryOut, "summary", "hcs-summary.md", "Markdown summary output path")
+	fs.StringVar(&opts.kicsBin, "kics-bin", "kics", "kics binary")
+	fs.StringVar(&opts.trivyBin, "trivy-bin", "trivy", "trivy binary")
+	fs.StringVar(&opts.queryPath, "kics-query-path", os.Getenv("KICS_QUERIES_PATH"), "KICS query assets path")
+	fs.StringVar(&opts.failOn, "fail-on", "", "exit non-zero if any finding is >= this severity (critical|high|medium|low|info)")
+
+	flagArgs, scanPaths, err := partitionScanArgs(fs, args)
+	if err != nil {
+		return nil, opts, err
+	}
+	if err := fs.Parse(flagArgs); err != nil {
+		return nil, opts, err
+	}
+	if len(scanPaths) == 0 {
+		return nil, opts, errors.New("at least one scan path is required")
+	}
+	return scanPaths, opts, nil
+}
+
+func partitionScanArgs(fs *flag.FlagSet, args []string) (flagArgs, paths []string, err error) {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			paths = append(paths, args[i+1:]...)
+			break
+		}
+		if !strings.HasPrefix(arg, "-") || arg == "-" {
+			paths = append(paths, arg)
+			continue
+		}
+
+		name := strings.TrimLeft(arg, "-")
+		if before, _, ok := strings.Cut(name, "="); ok {
+			name = before
+		}
+		if name == "h" || name == "help" {
+			return nil, nil, flag.ErrHelp
+		}
+		f := fs.Lookup(name)
+		if f == nil {
+			return nil, nil, fmt.Errorf("unknown flag %q", arg)
+		}
+		flagArgs = append(flagArgs, arg)
+		if strings.Contains(arg, "=") {
+			continue
+		}
+		if i+1 >= len(args) {
+			return nil, nil, fmt.Errorf("flag %q requires a value", arg)
+		}
+		i++
+		flagArgs = append(flagArgs, args[i])
+	}
+	return flagArgs, paths, nil
+}
+
+func run(scanPaths []string, kicsConfig, trivyConfig, output, summaryOut, failOn string, r runner.Runner) (int, error) {
 	if failOn != "" && sev.Rank(failOn) == 0 {
 		return 0, fmt.Errorf("invalid --fail-on %q (want critical, high, medium, low, or info)", failOn)
 	}
@@ -54,7 +134,7 @@ func run(scanPath, kicsConfig, trivyConfig, output, summaryOut, failOn string, r
 	}
 	defer os.RemoveAll(tmp)
 
-	kout, err := r.KICSScan(scanPath, kicsConfig, tmp)
+	kout, err := r.KICSScan(scanPaths, kicsConfig, tmp)
 	if err != nil {
 		return 0, fmt.Errorf("kics: %w", err)
 	}

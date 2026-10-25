@@ -1,8 +1,8 @@
 name: "HCS Helm Chart Scanner"
-description: "Scan a Helm chart with KICS + Trivy and report a unified SARIF of findings"
+description: "Scan Helm charts with KICS + Trivy and report a unified SARIF of findings"
 inputs:
   path:
-    description: "Path to the repo/chart to scan"
+    description: "Path to scan, or multiple paths separated by newlines"
     default: "."
   kics-config:
     description: "Path to a KICS config file"
@@ -24,10 +24,19 @@ runs:
   steps:
     - name: Run HCS scan
       shell: bash
+      env:
+        HCS_PATHS: ${{ inputs.path }}
       run: |
+        scan_paths=()
+        while IFS= read -r scan_path; do
+          scan_path="${scan_path%$'\r'}"
+          if [[ -n "$scan_path" ]]; then
+            scan_paths+=("$scan_path")
+          fi
+        done <<< "$HCS_PATHS"
         docker run --rm \
           -v "${{ github.workspace }}:/workspace" -w /workspace \
-          ghcr.io/mabsipca/hcs:latest scan "${{ inputs.path }}" \
+          ghcr.io/mabsipca/hcs:latest scan "${scan_paths[@]}" \
           --output "${{ inputs.output }}" --summary "hcs-summary.md" \
           ${{ inputs.fail-on && format('--fail-on "{0}"', inputs.fail-on) || '' }} \
           ${{ inputs.kics-config && format('--kics-config "{0}"', inputs.kics-config) || '' }} \

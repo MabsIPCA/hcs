@@ -1,28 +1,67 @@
 package runner
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
+func TestMain(m *testing.M) {
+	if os.Getenv("HCS_FAKE_KICS") == "1" {
+		runFakeKICS()
+		return
+	}
+	os.Exit(m.Run())
+}
+
+func runFakeKICS() {
+	args := strings.Join(os.Args[1:], " ")
+	for _, required := range []string{
+		"--report-formats json,sarif",
+		"--image-bom",
+		"-p chart-a -p chart-b",
+	} {
+		if !strings.Contains(args, required) {
+			fmt.Fprintln(os.Stderr, "missing arguments:", required)
+			os.Exit(3)
+		}
+	}
+
+	var out string
+	for i, arg := range os.Args[1:] {
+		if arg == "-o" && i+2 < len(os.Args) {
+			out = os.Args[i+2]
+			break
+		}
+	}
+	if out == "" {
+		fmt.Fprintln(os.Stderr, "missing output directory")
+		os.Exit(3)
+	}
+	files := map[string]string{
+		"results.json":        `{"severity_counters":{},"queries":[]}`,
+		"results.sarif":       `{"version":"2.1.0","runs":[]}`,
+		"kics-image-bom.json": `{"bomFormat":"CycloneDX","specVersion":"1.5","version":1,"components":[]}`,
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(out, name), []byte(content), 0o644); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(3)
+		}
+	}
+	os.Exit(0)
+}
+
 func TestKICSScan(t *testing.T) {
-	dir := t.TempDir()
-	kics := filepath.Join(dir, "kics")
-	script := `#!/bin/sh
-case "$*" in *"--report-formats json,sarif"*) ;; *) echo "missing --report-formats: $*" >&2; exit 3;; esac
-case "$*" in *"--image-bom"*) ;; *) echo "missing --image-bom: $*" >&2; exit 3;; esac
-prev=""; out=""
-for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done
-printf '{"severity_counters":{},"queries":[]}' > "$out/results.json"
-printf '{"version":"2.1.0","runs":[]}' > "$out/results.sarif"
-printf '{"bomFormat":"CycloneDX","specVersion":"1.5","version":1,"components":[]}' > "$out/kics-image-bom.json"
-`
-	if err := os.WriteFile(kics, []byte(script), 0o755); err != nil {
+	kics, err := os.Executable()
+	if err != nil {
 		t.Fatal(err)
 	}
+	t.Setenv("HCS_FAKE_KICS", "1")
 	out := t.TempDir()
-	got, err := Runner{KICSBin: kics}.KICSScan(".", "", out)
+	got, err := Runner{KICSBin: kics}.KICSScan([]string{"chart-a", "chart-b"}, "", out)
 	if err != nil {
 		t.Fatalf("KICSScan: %v", err)
 	}

@@ -1,6 +1,6 @@
 # hcs — Helm Chart Scanner
 
-`hcs` scans a Helm chart repository and produces a unified [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) report combining Helm misconfiguration findings and container image vulnerabilities for every image referenced in the chart, together with a Markdown summary suitable for a GitHub PR comment.
+`hcs` scans one or more Helm chart paths and produces a unified [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) report combining Helm misconfiguration findings and container image vulnerabilities for every image referenced in the charts, together with a Markdown summary suitable for a GitHub PR comment.
 
 ---
 
@@ -30,7 +30,7 @@ Helm chart repo
 ## CLI usage
 
 ```
-hcs scan <path> [flags]
+hcs scan <path> [<path> ...] [flags]
 ```
 
 | Flag | Default | Description |
@@ -55,6 +55,13 @@ hcs scan ./my-chart \
   --trivy-config trivy.yaml
 ```
 
+Scan multiple charts in one run by listing every path. Flags may appear before,
+after, or between paths:
+
+```bash
+hcs scan ./charts/api ./charts/worker --output hcs.sarif
+```
+
 With `--fail-on high`, `hcs` exits `1` if any misconfiguration or image vulnerability is `high` or `critical` severity — useful for gating a CI job while still writing the SARIF/summary output for inspection.
 
 ---
@@ -63,7 +70,7 @@ With `--fail-on high`, `hcs` exits `1` if any misconfiguration or image vulnerab
 
 The image is published to `ghcr.io/mabsipca/hcs` by `.github/workflows/publish.yml` on every `v*` tag push. Consumers should reference a pinned version tag (e.g. `ghcr.io/mabsipca/hcs:v1.2.3`) rather than `latest`.
 
-The published image bundles KICS (built from `MabsIPCA/kics@master`, which includes `--image-bom` support) and Trivy, so no local tool installation is required.
+The published image bundles KICS (built from `MabsIPCA/kics@master`, which includes `--image-bom` support) and Trivy 0.76.1, so no local tool installation is required.
 
 ```bash
 docker run --rm \
@@ -109,7 +116,7 @@ The repository ships a composite Action (`action.yml`) that:
 
 | Input | Default | Description |
 |---|---|---|
-| `path` | `.` | Path to the repo/chart to scan |
+| `path` | `.` | Path to scan, or multiple paths separated by newlines |
 | `kics-config` | _(none)_ | Path to a KICS config file |
 | `trivy-config` | _(none)_ | Path to a Trivy config file |
 | `output` | `hcs.sarif` | Unified SARIF output path |
@@ -147,7 +154,9 @@ jobs:
       - name: HCS scan
         uses: ./
         with:
-          path: "."
+          path: |
+            ./charts/api
+            ./charts/worker
           # fail-on: "high"
           # kics-config: ".kics.yaml"
           # trivy-config: "trivy.yaml"

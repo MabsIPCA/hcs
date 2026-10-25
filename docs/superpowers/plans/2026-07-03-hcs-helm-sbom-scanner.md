@@ -1174,7 +1174,7 @@ COPY . .
 RUN CGO_ENABLED=0 go build -o /out/hcs ./cmd/hcs
 
 # --- Trivy binary ---
-FROM aquasec/trivy:latest AS trivy
+FROM aquasec/trivy:0.76.1 AS trivy
 
 # --- Final image ---
 FROM debian:bookworm-slim

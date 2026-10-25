@@ -22,10 +22,15 @@ type KICSOutputs struct {
 	ImageBOM string // kics-image-bom.json (image discovery)
 }
 
-// KICSScan runs KICS once producing JSON + SARIF findings and an image BoM.
-func (r Runner) KICSScan(scanPath, kicsConfig, outDir string) (KICSOutputs, error) {
-	args := []string{"scan", "-p", scanPath, "--experimental-helm-scan", "--image-bom",
-		"--report-formats", "json,sarif", "-o", outDir, "--no-progress"}
+// KICSScan runs KICS once across all scan paths, producing JSON + SARIF
+// findings and an image BoM.
+func (r Runner) KICSScan(scanPaths []string, kicsConfig, outDir string) (KICSOutputs, error) {
+	args := []string{"scan"}
+	for _, scanPath := range scanPaths {
+		args = append(args, "-p", scanPath)
+	}
+	args = append(args, "--experimental-helm-scan", "--image-bom",
+		"--report-formats", "json,sarif", "-o", outDir, "--no-progress")
 	if r.KICSQueryPath != "" {
 		args = append(args, "-q", r.KICSQueryPath)
 	}

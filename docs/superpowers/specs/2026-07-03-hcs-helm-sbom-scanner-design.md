@@ -112,7 +112,7 @@ Multi-stage:
 - **Stage `hcs-build`:** builds the `hcs` Go binary.
 - **Final stage** (small glibc base, e.g. debian-slim; KICS renders Helm via its
   Go library, so no `helm`/`git` CLI is needed at runtime):
-  `hcs` + `kics` + KICS `assets/` + `trivy` (from the official Trivy release).
+  `hcs` + `kics` + KICS `assets/` + `trivy` 0.76.1 (from the official Trivy release).
   `ENTRYPOINT ["hcs"]`. KICS is invoked with its bundled query path.
 
 ## GitHub Action + PR comment
